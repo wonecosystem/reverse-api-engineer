@@ -346,3 +346,29 @@ def test_usage_counts_each_turn_and_keeps_cost_per_invocation(har_path: Path, tm
     assert eng.usage_metadata["input_tokens"] == 2000
     assert eng.usage_metadata["estimated_cost_usd"] == pytest.approx(first["estimated_cost_usd"] * 2, rel=1e-6)
     assert eng.usage_metadata["estimated_cost_usd"] < eng.usage_metadata["cost"] + eng.cost_before
+
+
+@pytest.mark.asyncio
+async def test_a_cli_without_stream_json_is_named_as_outdated(har_path: Path, tmp_path: Path) -> None:
+    eng = make_engineer(har_path, tmp_path)
+    proc = FakeProc([], returncode=2)
+    proc.stderr = FakeStream()
+    proc.stderr.read = AsyncMock(side_effect=[b"hermes: error: unrecognized arguments: --query-file - --oneshot\n", b""])  # type: ignore[method-assign]
+    with (
+        patch("reverse_api.hermes_engineer.hermes_binary", return_value="/usr/bin/hermes"),
+        patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=proc)),
+    ):
+        assert await eng.analyze_and_generate() is None
+
+    errors = [str(m["content"]) for m in eng.message_store.load() if m["type"] == "error"]
+    assert any("v2026.9.21" in e for e in errors)
+
+
+def test_a_replay_gap_takes_the_whole_reply_from_the_result(har_path: Path, tmp_path: Path) -> None:
+    import asyncio
+
+    eng = make_engineer(har_path, tmp_path)
+    asyncio.run(eng._dispatch({"type": "text", "text": "Partial"}))
+    asyncio.run(eng._dispatch({"type": "result", "exit_code": 0, "text": "Partial reply, then the rest.", "replay_gap": True}))
+    thinking = [m["content"] for m in eng.message_store.load() if m["type"] == "thinking"]
+    assert thinking == ["Partial reply, then the rest."]

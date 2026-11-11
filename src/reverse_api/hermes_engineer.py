@@ -35,6 +35,12 @@ from .utils import SDK_MAX_BUFFER_SIZE
 
 # A hermes build outside PATH (a virtualenv, a wrapper script) is picked from here.
 HERMES_BIN_ENV = "RAE_HERMES_BIN"
+# `hermes chat --format stream-json` first shipped in v2026.9.21; the PyPI package predates it.
+OUTDATED_HERMES = (
+    "The installed hermes CLI does not support `--format stream-json`, which this backend needs. "
+    "Install Hermes Agent v2026.9.21 or later with the official installer "
+    "(https://hermes-agent.nousresearch.com/docs); the hermes-agent package on PyPI is older."
+)
 # A single event line arriving later than this means the CLI is stuck, not busy.
 STREAM_TIMEOUT_S = 900.0
 
@@ -201,6 +207,10 @@ class HermesEngineer(BaseEngineer):
             return False, None
         if kind == "result":
             self._record_session(event.get("session_id"))
+            final = event.get("text")
+            if event.get("replay_gap") and isinstance(final, str):
+                # The text events stopped partway; the result carries the whole reply.
+                self._narrative = [final]
             self._apply_usage(event)
             self._flush_narrative()
             code = event.get("exit_code")
@@ -294,17 +304,17 @@ class HermesEngineer(BaseEngineer):
                 except asyncio.CancelledError:
                     pass
 
+        extra = stderr_acc.decode("utf-8", errors="replace").strip()
         if error:
-            extra = stderr_acc.decode("utf-8", errors="replace").strip()
             return {"error": f"{error}\n{extra}" if extra else error}
+        if not saw_result and "unrecognized arguments" in extra:
+            return {"error": OUTDATED_HERMES}
         # A nonzero exit is a failed turn whatever an earlier turn already put in the usage.
         if proc.returncode not in (None, 0):
-            extra = stderr_acc.decode("utf-8", errors="replace").strip()
             return {"error": extra or f"hermes exited with code {proc.returncode}"}
         if not saw_result:
             # Without the closing event the run stopped early; a client left by an earlier turn
             # would otherwise make this half-run look like a success.
-            extra = stderr_acc.decode("utf-8", errors="replace").strip()
             return {"error": extra or "hermes ended without a result event (the run did not finish)"}
         return {}
 
