@@ -13,6 +13,7 @@ from reverse_api.hermes_engineer import (
     HERMES_BIN_ENV,
     HermesEngineer,
     hermes_binary,
+    install_command,
     parse_event,
 )
 
@@ -372,3 +373,11 @@ def test_a_replay_gap_takes_the_whole_reply_from_the_result(har_path: Path, tmp_
     asyncio.run(eng._dispatch({"type": "result", "exit_code": 0, "text": "Partial reply, then the rest.", "replay_gap": True}))
     thinking = [m["content"] for m in eng.message_store.load() if m["type"] == "thinking"]
     assert thinking == ["Partial reply, then the rest."]
+
+
+def test_install_command_follows_the_os() -> None:
+    with patch("reverse_api.hermes_engineer.sys.platform", "win32"):
+        assert install_command().startswith("iex (irm https://hermes-agent.nousresearch.com/install.ps1)")
+    for platform in ("darwin", "linux"):
+        with patch("reverse_api.hermes_engineer.sys.platform", platform):
+            assert install_command() == "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"

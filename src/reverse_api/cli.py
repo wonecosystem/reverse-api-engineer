@@ -338,7 +338,7 @@ def _build_dry_run_payload(
         "cursor": "CURSOR_API_KEY",
     }.get(sdk)
     if sdk == "hermes":
-        from .hermes_engineer import HERMES_BIN_ENV, hermes_binary
+        from .hermes_engineer import HERMES_BIN_ENV, hermes_binary, install_command
 
         message = (
             "the hermes backend engineers a saved capture; it does not drive the browser, "
@@ -347,7 +347,7 @@ def _build_dry_run_payload(
         if hermes_binary() is None:
             message = (
                 "the hermes backend engineers a saved capture and it does not drive the browser; "
-                f"agent capture needs another sdk. For engineer runs, install Hermes Agent or set {HERMES_BIN_ENV}."
+                f"agent capture needs another sdk. For engineer runs, install Hermes Agent with `{install_command()}` or set {HERMES_BIN_ENV}."
             )
         checks.append({"name": "sdk:hermes", "status": "error", "message": message})
     elif sdk_env_var is None:

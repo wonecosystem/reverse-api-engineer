@@ -25,6 +25,7 @@ import asyncio
 import json
 import os
 import shutil
+import sys
 from pathlib import Path
 from typing import Any, cast
 
@@ -35,12 +36,30 @@ from .utils import SDK_MAX_BUFFER_SIZE
 
 # A hermes build outside PATH (a virtualenv, a wrapper script) is picked from here.
 HERMES_BIN_ENV = "RAE_HERMES_BIN"
-# `hermes chat --format stream-json` first shipped in v2026.9.21; the PyPI package predates it.
-OUTDATED_HERMES = (
-    "The installed hermes CLI does not support `--format stream-json`, which this backend needs. "
-    "Install Hermes Agent v2026.9.21 or later with the official installer "
-    "(https://hermes-agent.nousresearch.com/docs); the hermes-agent package on PyPI is older."
-)
+
+
+def install_command() -> str:
+    """The official Hermes installer for this OS."""
+    if sys.platform == "win32":
+        return "iex (irm https://hermes-agent.nousresearch.com/install.ps1)"
+    return "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
+
+
+def missing_hermes_message() -> str:
+    # `hermes chat --format stream-json` first shipped in v2026.9.21; the PyPI package predates it.
+    return (
+        f"The hermes CLI was not found. Install Hermes Agent v2026.9.21 or later with `{install_command()}`, "
+        f"or point {HERMES_BIN_ENV} at the binary."
+    )
+
+
+def outdated_hermes_message() -> str:
+    return (
+        "The installed hermes CLI does not support `--format stream-json`, which this backend needs. "
+        f"Install Hermes Agent v2026.9.21 or later with `{install_command()}`; the hermes-agent package on PyPI is older."
+    )
+
+
 # A single event line arriving later than this means the CLI is stuck, not busy.
 STREAM_TIMEOUT_S = 900.0
 
@@ -107,10 +126,7 @@ class HermesEngineer(BaseEngineer):
         """The CLI invocation, without the prompt: it arrives on stdin (-), so quotes and backticks stay verbatim."""
         binary = hermes_binary()
         if binary is None:
-            raise RuntimeError(
-                f"the `hermes` CLI was not found. Install Hermes Agent (https://hermes-agent.nousresearch.com/docs) "
-                f"or point {HERMES_BIN_ENV} at the binary."
-            )
+            raise RuntimeError(missing_hermes_message())
         argv = [
             binary,
             "chat",
@@ -308,7 +324,7 @@ class HermesEngineer(BaseEngineer):
         if error:
             return {"error": f"{error}\n{extra}" if extra else error}
         if not saw_result and "unrecognized arguments" in extra:
-            return {"error": OUTDATED_HERMES}
+            return {"error": outdated_hermes_message()}
         # A nonzero exit is a failed turn whatever an earlier turn already put in the usage.
         if proc.returncode not in (None, 0):
             return {"error": extra or f"hermes exited with code {proc.returncode}"}
@@ -347,10 +363,7 @@ class HermesEngineer(BaseEngineer):
         self.ui.start_analysis()
 
         if hermes_binary() is None:
-            msg = (
-                f"the `hermes` CLI was not found. Install Hermes Agent "
-                f"(https://hermes-agent.nousresearch.com/docs) or point {HERMES_BIN_ENV} at the binary."
-            )
+            msg = missing_hermes_message()
             self.ui.error(msg)
             self.message_store.save_error(msg)
             return None
