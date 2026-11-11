@@ -32,7 +32,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "copilot_model": "gpt-5",  # Model for Copilot SDK sessions
     "hermes_model": None,  # None keeps whatever model the user's own Hermes config selects
     "hermes_provider": None,  # None keeps the provider the user's own Hermes config selects
-    "hermes_max_turns": 60,  # Turn cap for a Hermes engineer run
+    "hermes_max_turns": None,  # None keeps the cap from the user's own Hermes config
     "opencode_model": DEFAULT_OPENCODE_MODEL,
     "opencode_provider": DEFAULT_OPENCODE_PROVIDER,
     "opencode_auto_start": True,

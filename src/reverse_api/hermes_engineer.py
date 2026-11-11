@@ -35,8 +35,6 @@ from .utils import SDK_MAX_BUFFER_SIZE
 
 # A hermes build outside PATH (a virtualenv, a wrapper script) is picked from here.
 HERMES_BIN_ENV = "RAE_HERMES_BIN"
-# Enough turns for read-HAR, write, run and fix; a runaway loop still stops.
-DEFAULT_HERMES_MAX_TURNS = 60
 # A single event line arriving later than this means the CLI is stuck, not busy.
 STREAM_TIMEOUT_S = 900.0
 
@@ -85,7 +83,8 @@ class HermesEngineer(BaseEngineer):
         super().__init__(*args, **kwargs)
         self.hermes_model = hermes_model or None
         self.hermes_provider = hermes_provider or None
-        self.hermes_max_turns = hermes_max_turns or DEFAULT_HERMES_MAX_TURNS
+        # None keeps the cap from the user's Hermes config (agent.max_turns).
+        self.hermes_max_turns = hermes_max_turns or None
         # The CLI runs with its cwd in the workspace, so every path the prompt and the argv
         # carry must be absolute: a relative --output-dir would otherwise point outside it.
         self.scripts_dir = Path(self.scripts_dir).expanduser().resolve()
@@ -117,9 +116,9 @@ class HermesEngineer(BaseEngineer):
             "--in",
             str(self.scripts_dir),
             "--ignore-rules",
-            "--max-turns",
-            str(self.hermes_max_turns),
         ]
+        if self.hermes_max_turns:
+            argv += ["--max-turns", str(self.hermes_max_turns)]
         if resume_session:
             argv += ["--resume", resume_session]
         if self.hermes_model:
@@ -205,10 +204,11 @@ class HermesEngineer(BaseEngineer):
             self._apply_usage(event)
             self._flush_narrative()
             code = event.get("exit_code")
-            text = event.get("text")
             failure: str | None = None
             if isinstance(code, int) and code != 0:
-                failure = (text if isinstance(text, str) else "").strip() or f"hermes exited with code {code}"
+                # `error` carries the cause (a missing key, an unknown model); `text` is the final reply.
+                reason = next((v for v in (event.get("error"), event.get("text")) if isinstance(v, str) and v.strip()), "")
+                failure = reason.strip() or f"hermes exited with code {code}"
             return True, failure
         return False, None
 

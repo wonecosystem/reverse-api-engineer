@@ -127,7 +127,7 @@ def test_argv_without_model_lets_hermes_choose(har_path: Path, tmp_path: Path) -
     eng = make_engineer(har_path, tmp_path)
     with patch("reverse_api.hermes_engineer.hermes_binary", return_value="/usr/bin/hermes"):
         argv = eng._argv(None)
-    assert "-m" not in argv and "--provider" not in argv
+    assert "-m" not in argv and "--provider" not in argv and "--max-turns" not in argv
 
 
 def test_argv_reports_a_missing_cli(har_path: Path, tmp_path: Path) -> None:
@@ -232,6 +232,23 @@ async def test_a_failing_result_event_stops_the_run(har_path: Path, tmp_path: Pa
 
 
 @pytest.mark.asyncio
+async def test_a_failing_result_reports_its_error_over_the_reply(har_path: Path, tmp_path: Path) -> None:
+    eng = make_engineer(har_path, tmp_path)
+    proc = FakeProc(
+        events({"type": "result", "exit_code": 1, "text": "I could not finish.", "error": "no API key for provider"}),
+        returncode=1,
+    )
+    with (
+        patch("reverse_api.hermes_engineer.hermes_binary", return_value="/usr/bin/hermes"),
+        patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=proc)),
+    ):
+        assert await eng.analyze_and_generate() is None
+
+    errors = [str(m["content"]) for m in eng.message_store.load() if m["type"] == "error"]
+    assert any("no API key for provider" in e for e in errors)
+
+
+@pytest.mark.asyncio
 async def test_a_run_that_writes_no_client_is_an_error(har_path: Path, tmp_path: Path) -> None:
     eng = make_engineer(har_path, tmp_path)
     proc = FakeProc(
@@ -301,22 +318,23 @@ async def test_a_nonzero_exit_fails_even_after_a_successful_turn(har_path: Path,
     assert out is None
 
 
-def test_a_relative_output_dir_becomes_absolute(har_path: Path, tmp_path: Path) -> None:
+def test_a_relative_output_dir_becomes_absolute(har_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The CLI changes into the workspace, so the paths it receives must not be relative."""
+    monkeypatch.chdir(tmp_path)
     eng = HermesEngineer(
         run_id="run123",
-        har_path=har_path,
+        har_path=Path(har_path.name),
         prompt="fetch products",
-        output_dir=str(tmp_path / "rel"),
+        output_dir="rel",
         sdk="hermes",
         interactive=False,
         verbose=False,
     )
     with patch("reverse_api.hermes_engineer.hermes_binary", return_value="/usr/bin/hermes"):
         argv = eng._argv(None)
-    assert eng.scripts_dir.is_absolute()
-    assert eng.har_path.is_absolute()
-    assert Path(argv[argv.index("--in") + 1]).is_absolute()
+    assert eng.scripts_dir.is_relative_to(tmp_path / "rel")
+    assert eng.har_path == har_path
+    assert argv[argv.index("--in") + 1] == str(eng.scripts_dir)
 
 
 def test_usage_counts_each_turn_and_keeps_cost_per_invocation(har_path: Path, tmp_path: Path) -> None:

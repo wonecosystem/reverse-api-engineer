@@ -77,6 +77,8 @@ def default_model_for_configured_sdk(sdk: str | None = None) -> str:
         return str(config_manager.get("copilot_model") or "gpt-5")
     if s == "cursor":
         return str(config_manager.get("cursor_model") or "composer-2.5")
+    if s == "hermes":
+        return str(config_manager.get("hermes_model") or "hermes default")
     return str(config_manager.get("claude_code_model") or "claude-sonnet-4-6")
 
 

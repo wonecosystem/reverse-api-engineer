@@ -461,7 +461,7 @@ def run_reverse_engineering(
         cursor_setting_sources: Optional explicit list (overrides cursor_web_search), e.g. ["project","user","all"].
         hermes_model: Model for the Hermes CLI; None keeps the model its own config selects.
         hermes_provider: Provider for the Hermes CLI; None keeps the provider its own config selects.
-        hermes_max_turns: Turn cap for a Hermes run (default 60).
+        hermes_max_turns: Turn cap for a Hermes run; None keeps the cap its own config sets.
         enable_sync: Enable real-time file syncing during engineering
         is_fresh: Whether to start fresh (ignore previous scripts)
         output_language: Target language - "python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby", or "c"
